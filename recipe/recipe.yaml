@@ -12,33 +12,34 @@ source:
 
 build:
   script:
-    - if: win
-      then:
-        # hack: path too long for pixi_config subpackage, https://github.com/prefix-dev/pixi/issues/3691
-        - set CARGO_HOME=C:\.cargo
-    - cd pyrefly
-    - if: unix
-      then:
-        - export CARGO_PROFILE_RELEASE_STRIP=symbols
-        - export CARGO_PROFILE_RELEASE_LTO=fat
-        - cargo install --locked --no-track --bins --root ${PREFIX} --path .
-      else:
-        - set CARGO_PROFILE_RELEASE_STRIP=symbols
-        - set CARGO_PROFILE_RELEASE_LTO=fat
-        - cargo install --locked --no-track --bins --root %PREFIX% --path .
-    - cargo-bundle-licenses --format yaml --output ./THIRDPARTY.yml
-  number: 0
+    env:
+      CARGO_PROFILE_RELEASE_STRIP: symbols
+      CARGO_PROFILE_RELEASE_LTO: fat
+    content:
+      - cd pyrefly
+      - if: unix
+        then:
+          - cargo auditable install --locked --no-track --bins --root ${{ PREFIX }} --path .
+        else:
+          - cargo auditable install --locked --no-track --bins --root %LIBRARY_PREFIX% --path .
+      - cargo-bundle-licenses --format yaml --output ./THIRDPARTY.yml
+  number: 1
 
 requirements:
   build:
     - ${{ compiler('rust') }}
-    - cargo-bundle-licenses
     - ${{ compiler('c') }}
     - ${{ stdlib('c') }}
+    - cargo-bundle-licenses
+    - cargo-auditable
     - make
 
 tests:
   - script: pyrefly --help
+  - package_contents:
+      bin:
+        - pyrefly
+      strict: true
 
 about:
   homepage: http://pyrefly.org
