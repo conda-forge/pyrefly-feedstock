@@ -17,6 +17,10 @@ build:
       CARGO_PROFILE_RELEASE_LTO: fat
     content:
       - cd pyrefly
+      - if: win
+        then:
+          # path too long for git dependencies
+          - set CARGO_HOME=C:\.cargo
       - if: unix
         then:
           - cargo auditable install --locked --no-track --bins --root ${{ PREFIX }} --path .
