@@ -1,6 +1,6 @@
 context:
   name: pyrefly
-  version: "1.0.0"
+  version: "1.1.0"
 
 package:
   name: ${{ name|lower }}
@@ -8,7 +8,7 @@ package:
 
 source:
   url: https://github.com/facebook/${{ name }}/archive/refs/tags/${{ version }}.tar.gz
-  sha256: a92476d5922edaf511020f8edaffaed91afeef64e0040f51a43151efa715136a
+  sha256: 4fc08636a81626ae8b096270bc9d4a246b085e57ae3fe2f3fc30d36a015c2afb
 
 build:
   script:
