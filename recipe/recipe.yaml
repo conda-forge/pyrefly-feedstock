@@ -19,17 +19,19 @@ build:
       # https://pixi.sh/dev/global_tools/introduction/#opt-out-of-conda_prefix
       - if: win
         then:
-          - if not exist "%PREFIX%\\etc\\pixi" mkdir "%PREFIX%\\etc\\pixi\\pyrefly"
+          - if not exist "%PREFIX%\\etc\\pixi\\pyrefly" mkdir "%PREFIX%\\etc\\pixi\\pyrefly"
           - type nul > "%PREFIX%\\etc\\pixi\\pyrefly\\global-ignore-conda-prefix"
         else:
           - mkdir -p "${PREFIX}/etc/pixi/pyrefly"
           - touch "${PREFIX}/etc/pixi/pyrefly/global-ignore-conda-prefix"
       - cd pyrefly
+      # `cargo install` ignores the `CARGO_BUILD_TARGET` set by the rust activation,
+      # so the target triple has to be passed explicitly to cross compile.
       - if: unix
         then:
-          - cargo auditable install --locked --no-track --bins --root ${{ PREFIX }} --path .
+          - cargo auditable install --locked --no-track --bins --target ${CARGO_BUILD_TARGET} --root ${{ PREFIX }} --path .
         else:
-          - cargo auditable install --locked --no-track --bins --root %LIBRARY_PREFIX% --path .
+          - cargo auditable install --locked --no-track --bins --target %CARGO_BUILD_TARGET% --root %LIBRARY_PREFIX% --path .
       - cargo-bundle-licenses --format yaml --output ./THIRDPARTY.yml
   number: 1
 
@@ -40,7 +42,9 @@ requirements:
     - ${{ stdlib('c') }}
     - cargo-bundle-licenses
     - cargo-auditable
-    - make
+    # no `make` on win-arm64, and nothing in the build actually invokes it there
+    - if: not win
+      then: make
 
 tests:
   - script: pyrefly --help
