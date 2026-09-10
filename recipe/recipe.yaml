@@ -25,14 +25,18 @@ build:
           - mkdir -p "${PREFIX}/etc/pixi/pyrefly"
           - touch "${PREFIX}/etc/pixi/pyrefly/global-ignore-conda-prefix"
       - cd pyrefly
+      # `CFLAGS` & co. hold the target flags, which break cc-rs when it compiles build
+      # dependencies for the build platform. The rust activation exports per-target
+      # `CFLAGS_<triple>` etc., so cc-rs picks the right ones itself.
+      - if: unix
+        then: unset CFLAGS CPPFLAGS CXXFLAGS
+      # `rust-lld` cannot handle the relocations gcc emits for power8, so link with bfd
+      - if: target_platform == "linux-ppc64le"
+        then: export CARGO_BUILD_RUSTFLAGS="${CARGO_BUILD_RUSTFLAGS:-} -C link-self-contained=no -C link-arg=-fuse-ld=bfd"
       # `cargo install` ignores the `CARGO_BUILD_TARGET` set by the rust activation,
       # so the target triple has to be passed explicitly to cross compile.
       - if: unix
         then:
-          # `CFLAGS` & co. hold the target flags, which break cc-rs when it compiles
-          # build dependencies for the build platform. The rust activation exports
-          # per-target `CFLAGS_<triple>` etc., so cc-rs picks the right ones itself.
-          - unset CFLAGS CPPFLAGS CXXFLAGS
           - cargo auditable install --locked --no-track --bins --target ${CARGO_BUILD_TARGET} --root ${{ PREFIX }} --path .
         else:
           - cargo auditable install --locked --no-track --bins --target %CARGO_BUILD_TARGET% --root %LIBRARY_PREFIX% --path .
