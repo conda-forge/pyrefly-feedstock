@@ -15,6 +15,15 @@ build:
       CARGO_PROFILE_RELEASE_STRIP: symbols
       CARGO_PROFILE_RELEASE_LTO: fat
     content:
+      # Tell `pixi global` to not set CONDA_PREFIX during activation
+      # https://pixi.sh/dev/global_tools/introduction/#opt-out-of-conda_prefix
+      - if: win
+        then:
+          - if not exist "%PREFIX%\\etc\\pixi" mkdir "%PREFIX%\\etc\\pixi\\pyrefly"
+          - type nul > "%PREFIX%\\etc\\pixi\\pyrefly\\global-ignore-conda-prefix"
+        else:
+          - mkdir -p "${PREFIX}/etc/pixi/pyrefly"
+          - touch "${PREFIX}/etc/pixi/pyrefly/global-ignore-conda-prefix"
       - cd pyrefly
       - if: unix
         then:
@@ -36,6 +45,8 @@ requirements:
 tests:
   - script: pyrefly --help
   - package_contents:
+      files:
+        - etc/pixi/pyrefly/global-ignore-conda-prefix
       bin:
         - pyrefly
       strict: true
