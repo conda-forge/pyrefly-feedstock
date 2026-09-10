@@ -1,13 +1,12 @@
 context:
-  name: pyrefly
   version: "1.2.0"
 
 package:
-  name: ${{ name|lower }}
+  name: pyrefly
   version: ${{ version }}
 
 source:
-  url: https://github.com/facebook/${{ name }}/archive/refs/tags/${{ version }}.tar.gz
+  url: https://github.com/facebook/pyrefly/archive/refs/tags/${{ version }}.tar.gz
   sha256: 39c3d391da0aa85eb7d0149fc57e860495f50e431f4911547f21906a35ab33bd
 
 build:
@@ -16,18 +15,33 @@ build:
       CARGO_PROFILE_RELEASE_STRIP: symbols
       CARGO_PROFILE_RELEASE_LTO: fat
     content:
-      - cd pyrefly
+      # Tell `pixi global` to not set CONDA_PREFIX during activation
+      # https://pixi.sh/dev/global_tools/introduction/#opt-out-of-conda_prefix
       - if: win
         then:
-          # path too long for git dependencies
-          - set CARGO_HOME=C:\.cargo
+          - if not exist "%PREFIX%\\etc\\pixi\\pyrefly" mkdir "%PREFIX%\\etc\\pixi\\pyrefly"
+          - type nul > "%PREFIX%\\etc\\pixi\\pyrefly\\global-ignore-conda-prefix"
+        else:
+          - mkdir -p "${PREFIX}/etc/pixi/pyrefly"
+          - touch "${PREFIX}/etc/pixi/pyrefly/global-ignore-conda-prefix"
+      - cd pyrefly
+      # `CFLAGS` & co. hold the target flags, which break cc-rs when it compiles build
+      # dependencies for the build platform. The rust activation exports per-target
+      # `CFLAGS_<triple>` etc., so cc-rs picks the right ones itself.
+      - if: unix
+        then: unset CFLAGS CPPFLAGS CXXFLAGS
+      # `rust-lld` cannot handle the relocations gcc emits for power8, so link with bfd
+      - if: target_platform == "linux-ppc64le"
+        then: export CARGO_BUILD_RUSTFLAGS="${CARGO_BUILD_RUSTFLAGS:-} -C link-self-contained=no -C link-arg=-fuse-ld=bfd"
+      # `cargo install` ignores the `CARGO_BUILD_TARGET` set by the rust activation,
+      # so the target triple has to be passed explicitly to cross compile.
       - if: unix
         then:
-          - cargo auditable install --locked --no-track --bins --root ${{ PREFIX }} --path .
+          - cargo auditable install --locked --no-track --bins --target ${CARGO_BUILD_TARGET} --root ${{ PREFIX }} --path .
         else:
-          - cargo auditable install --locked --no-track --bins --root %LIBRARY_PREFIX% --path .
+          - cargo auditable install --locked --no-track --bins --target %CARGO_BUILD_TARGET% --root %LIBRARY_PREFIX% --path .
       - cargo-bundle-licenses --format yaml --output ./THIRDPARTY.yml
-  number: 0
+  number: 1
 
 requirements:
   build:
@@ -36,11 +50,15 @@ requirements:
     - ${{ stdlib('c') }}
     - cargo-bundle-licenses
     - cargo-auditable
-    - make
+    # no `make` on win-arm64, and nothing in the build actually invokes it there
+    - if: not win
+      then: make
 
 tests:
   - script: pyrefly --help
   - package_contents:
+      files:
+        - etc/pixi/pyrefly/global-ignore-conda-prefix
       bin:
         - pyrefly
       strict: true
