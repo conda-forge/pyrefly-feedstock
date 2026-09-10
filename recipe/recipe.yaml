@@ -29,6 +29,10 @@ build:
       # so the target triple has to be passed explicitly to cross compile.
       - if: unix
         then:
+          # `CFLAGS` & co. hold the target flags, which break cc-rs when it compiles
+          # build dependencies for the build platform. The rust activation exports
+          # per-target `CFLAGS_<triple>` etc., so cc-rs picks the right ones itself.
+          - unset CFLAGS CPPFLAGS CXXFLAGS
           - cargo auditable install --locked --no-track --bins --target ${CARGO_BUILD_TARGET} --root ${{ PREFIX }} --path .
         else:
           - cargo auditable install --locked --no-track --bins --target %CARGO_BUILD_TARGET% --root %LIBRARY_PREFIX% --path .
