@@ -68,6 +68,11 @@ tests:
   - package_contents:
       files:
         - etc/pixi/pyrefly/global-ignore-conda-prefix
+        - if: unix
+          then:
+            - share/zsh/site-functions/_pyrefly
+            - share/bash-completion/completions/pyrefly
+            - share/fish/vendor_completions.d/pyrefly.fish
       bin:
         - pyrefly
       strict: true
