@@ -1,5 +1,5 @@
 context:
-  version: "1.2.0"
+  version: "1.3.0"
 
 package:
   name: pyrefly
@@ -7,7 +7,10 @@ package:
 
 source:
   url: https://github.com/facebook/pyrefly/archive/refs/tags/${{ version }}.tar.gz
-  sha256: 39c3d391da0aa85eb7d0149fc57e860495f50e431f4911547f21906a35ab33bd
+  sha256: f26552aae8957d6924319034eadd69830f2442685fc4e696c97e777c827a4082
+  patches:
+    # https://github.com/facebook/pyrefly/pull/4884
+    - 0001-completion.patch
 
 build:
   script:
@@ -41,7 +44,13 @@ build:
         else:
           - cargo auditable install --locked --no-track --bins --target %CARGO_BUILD_TARGET% --root %LIBRARY_PREFIX% --path .
       - cargo-bundle-licenses --format yaml --output ./THIRDPARTY.yml
-  number: 1
+      - if: unix
+        then:
+          - mkdir -p $PREFIX/share/zsh/site-functions $PREFIX/share/bash-completion/completions $PREFIX/share/fish/vendor_completions.d
+          - $PREFIX/bin/pyrefly completion --shell zsh > $PREFIX/share/zsh/site-functions/_pyrefly
+          - $PREFIX/bin/pyrefly completion --shell bash > $PREFIX/share/bash-completion/completions/pyrefly
+          - $PREFIX/bin/pyrefly completion --shell fish > $PREFIX/share/fish/vendor_completions.d/pyrefly.fish
+  number: 0
 
 requirements:
   build:
@@ -59,6 +68,11 @@ tests:
   - package_contents:
       files:
         - etc/pixi/pyrefly/global-ignore-conda-prefix
+        - if: unix
+          then:
+            - share/zsh/site-functions/_pyrefly
+            - share/bash-completion/completions/pyrefly
+            - share/fish/vendor_completions.d/pyrefly.fish
       bin:
         - pyrefly
       strict: true
