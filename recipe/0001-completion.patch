@@ -1,0 +1,235 @@
+From 622d1b24d08d18e0bc3f9bdc8e8c47c6358bd42d Mon Sep 17 00:00:00 2001
+From: Pavel Zwerschke <pavelzw@gmail.com>
+Date: Thu, 10 Sep 2026 11:49:41 +0200
+Subject: [PATCH] feat: Add `pyrefly completion` command
+
+---
+ Cargo.lock                    | 10 ++++++++
+ pyrefly/Cargo.toml            |  1 +
+ pyrefly/bin/main.rs           | 19 +-------------
+ pyrefly/lib/commands/all.rs   | 37 +++++++++++++++++++++++++++
+ pyrefly/lib/lib.rs            |  1 +
+ website/docs/installation.mdx | 47 +++++++++++++++++++++++++++++++++++
+ 6 files changed, 97 insertions(+), 18 deletions(-)
+
+diff --git a/Cargo.lock b/Cargo.lock
+index 2d1ecaeb05..2035881bc5 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -490,6 +490,15 @@ dependencies = [
+  "unicode-width",
+ ]
+ 
++[[package]]
++name = "clap_complete"
++version = "4.6.9"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "3be2ad0423bdbbb0e25bc89add796f3559706d4a95e1bc98e4d9662a957b6a19"
++dependencies = [
++ "clap",
++]
++
+ [[package]]
+ name = "clap_derive"
+ version = "4.6.4"
+@@ -2348,6 +2357,7 @@ dependencies = [
+  "blake3",
+  "capnp",
+  "clap",
++ "clap_complete",
+  "codspeed-criterion-compat",
+  "crossbeam-channel",
+  "dashmap",
+diff --git a/pyrefly/Cargo.toml b/pyrefly/Cargo.toml
+index c2ed874341..d9d8601c84 100644
+--- a/pyrefly/Cargo.toml
++++ b/pyrefly/Cargo.toml
+@@ -40,6 +40,7 @@ arc-swap = { version = "1.9.2", features = ["weak"] }
+ blake3 = { version = "=1.8.6", features = ["mmap", "rayon", "traits-preview"] }
+ capnp = "0.25.6"
+ clap = { version = "4.6.2", features = ["cargo", "derive", "env", "string", "unicode", "wrap_help"] }
++clap_complete = "4.6.9"
+ crossbeam-channel = "0.5.16"
+ dashmap = { version = "6.2.1", features = ["rayon", "serde"] }
+ dupe = "0.9.1"
+diff --git a/pyrefly/bin/main.rs b/pyrefly/bin/main.rs
+index 147cf17608..fcf649b8de 100644
+--- a/pyrefly/bin/main.rs
++++ b/pyrefly/bin/main.rs
+@@ -10,8 +10,7 @@ use std::process::ExitCode;
+ 
+ use clap::Parser;
+ use clap::crate_version;
+-use library::Command;
+-use library::util::CommonGlobalArgs;
++use library::Args;
+ use pyrefly::commands::lsp::filter_unrecognized_lsp_args;
+ use pyrefly::library::library::library::library;
+ use pyrefly_util::args::get_args_expanded;
+@@ -29,22 +28,6 @@ static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+ #[cfg(target_os = "windows")]
+ static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+ 
+-/// Main CLI entrypoint for Pyrefly.
+-#[deny(clippy::missing_docs_in_private_items)]
+-#[derive(Debug, Parser)]
+-#[command(name = "pyrefly")]
+-#[command(about = "A fast Python type checker", long_about = None)]
+-#[command(version)]
+-struct Args {
+-    /// Common global arguments shared across commands.
+-    #[command(flatten)]
+-    common: CommonGlobalArgs,
+-
+-    /// Subcommand execution args.
+-    #[command(subcommand)]
+-    command: Command,
+-}
+-
+ /// Run based on the command line arguments.
+ async fn run() -> anyhow::Result<ExitCode> {
+     let expanded_args = get_args_expanded(args_os())?;
+diff --git a/pyrefly/lib/commands/all.rs b/pyrefly/lib/commands/all.rs
+index 2313b6b0f0..5e20970ede 100644
+--- a/pyrefly/lib/commands/all.rs
++++ b/pyrefly/lib/commands/all.rs
+@@ -5,9 +5,15 @@
+  * LICENSE file in the root directory of this source tree.
+  */
+ 
++use std::io;
++use std::io::Write;
+ use std::sync::Arc;
+ 
++use clap::CommandFactory;
++use clap::Parser;
+ use clap::Subcommand;
++use clap_complete::Shell;
++use clap_complete::generate;
+ use pyrefly_util::telemetry::Telemetry;
+ use pyrefly_util::thread_pool::ThreadCount;
+ 
+@@ -27,8 +33,25 @@ use crate::commands::stubgen::StubgenArgs;
+ use crate::commands::suppress::SuppressArgs;
+ use crate::commands::tsp::TspArgs;
+ use crate::commands::util::CommandExitStatus;
++use crate::commands::util::CommonGlobalArgs;
+ use crate::lsp::non_wasm::external_provider::NoExternalProvider;
+ 
++/// Main CLI entrypoint for Pyrefly.
++#[deny(clippy::missing_docs_in_private_items)]
++#[derive(Debug, Parser)]
++#[command(name = "pyrefly")]
++#[command(about = "A fast Python type checker", long_about = None)]
++#[command(version)]
++pub struct Args {
++    /// Common global arguments shared across commands.
++    #[command(flatten)]
++    pub common: CommonGlobalArgs,
++
++    /// Subcommand execution args.
++    #[command(subcommand)]
++    pub command: Command,
++}
++
+ /// Subcommands to run Pyrefly with.
+ #[deny(clippy::missing_docs_in_private_items)]
+ #[derive(Debug, Clone, Subcommand)]
+@@ -36,6 +59,13 @@ pub enum Command {
+     /// Full type checking on a file or a project
+     Check(FullCheckArgs),
+ 
++    /// Generate a shell completion script on stdout.
++    Completion {
++        /// Shell to generate completions for.
++        #[arg(long, value_enum)]
++        shell: Shell,
++    },
++
+     /// Check a Python code snippet
+     Snippet(SnippetCheckArgs),
+ 
+@@ -87,6 +117,13 @@ impl Command {
+                 args.run(version, config_configurer_wrapper, thread_count)
+                     .await
+             }
++            Command::Completion { shell } => {
++                // Buffer generation so stdout errors are returned instead of panicking.
++                let mut script = Vec::new();
++                generate(shell, &mut Args::command(), "pyrefly", &mut script);
++                io::stdout().lock().write_all(&script)?;
++                Ok((CommandExitStatus::Success, None))
++            }
+             Command::Snippet(args) => args.run(version, thread_count).await,
+             Command::BuckCheck(args) => Ok((args.run(thread_count)?, None)),
+             Command::BazelCheck(args) => Ok((args.run(thread_count)?, None)),
+diff --git a/pyrefly/lib/lib.rs b/pyrefly/lib/lib.rs
+index d744d3f589..351613e383 100644
+--- a/pyrefly/lib/lib.rs
++++ b/pyrefly/lib/lib.rs
+@@ -67,6 +67,7 @@ pub mod library {
+     pub mod library {
+         pub mod library {
+             pub mod library {
++                pub use crate::commands::all::Args;
+                 pub use crate::commands::all::Command;
+                 pub use crate::commands::check::CheckArgs;
+                 pub use crate::commands::check::CheckResult;
+diff --git a/website/docs/installation.mdx b/website/docs/installation.mdx
+index 9f8301535c..10a757298b 100644
+--- a/website/docs/installation.mdx
++++ b/website/docs/installation.mdx
+@@ -83,6 +83,53 @@ import TabItem from '@theme/TabItem';
+   </TabItem>
+ </Tabs>
+ 
++## Shell completion
++
++Generate a completion script with `pyrefly completion --shell <shell>`. Supported
++shells are `bash`, `zsh`, `fish`, `powershell`, and `elvish`. The script is written
++to standard output.
++
++For Bash, add this to `~/.bashrc`:
++
++```bash
++source <(pyrefly completion --shell bash)
++```
++
++For Zsh, add this to `~/.zshrc` after initializing completion with `compinit`:
++
++```zsh
++autoload -Uz compinit
++compinit
++source <(pyrefly completion --shell zsh)
++```
++
++For Fish, save the script in its completions directory:
++
++```fish
++mkdir -p ~/.config/fish/completions
++pyrefly completion --shell fish > ~/.config/fish/completions/pyrefly.fish
++```
++
++For PowerShell, add this to your profile (`$PROFILE`):
++
++```powershell
++pyrefly completion --shell powershell | Out-String | Invoke-Expression
++```
++
++For Elvish, save the script and load it from `~/.config/elvish/rc.elv`:
++
++```sh
++mkdir -p ~/.config/elvish/lib
++pyrefly completion --shell elvish > ~/.config/elvish/lib/pyrefly.elv
++```
++
++```elvish
++use pyrefly
++```
++
++Restart your shell after setup. Regenerate saved completion files after upgrading
++Pyrefly to include any new commands and options.
++
+ ## Configure
+ 
+ You can set up a basic configuration file to type-check your project. You can add configuration options to a `pyproject.toml` file or create a `pyrefly.toml` file in your project directory. All [configuration options are documented here](../configuration).
