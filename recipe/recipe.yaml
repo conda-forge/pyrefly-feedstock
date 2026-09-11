@@ -8,6 +8,9 @@ package:
 source:
   url: https://github.com/facebook/pyrefly/archive/refs/tags/${{ version }}.tar.gz
   sha256: f26552aae8957d6924319034eadd69830f2442685fc4e696c97e777c827a4082
+  patches:
+    # https://github.com/facebook/pyrefly/pull/4884
+    - 0001-completion.patch
 
 build:
   script:
@@ -41,6 +44,12 @@ build:
         else:
           - cargo auditable install --locked --no-track --bins --target %CARGO_BUILD_TARGET% --root %LIBRARY_PREFIX% --path .
       - cargo-bundle-licenses --format yaml --output ./THIRDPARTY.yml
+      - if: unix
+        then:
+          - mkdir -p $PREFIX/share/zsh/site-functions $PREFIX/share/bash-completion/completions $PREFIX/share/fish/vendor_completions.d
+          - $PREFIX/bin/pyrefly completion --shell zsh > $PREFIX/share/zsh/site-functions/_pyrefly
+          - $PREFIX/bin/pyrefly completion --shell bash > $PREFIX/share/bash-completion/completions/pyrefly
+          - $PREFIX/bin/pyrefly completion --shell fish > $PREFIX/share/fish/vendor_completions.d/pyrefly.fish
   number: 0
 
 requirements:
