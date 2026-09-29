@@ -8,9 +8,6 @@ package:
 source:
   url: https://github.com/facebook/pyrefly/archive/refs/tags/${{ version }}.tar.gz
   sha256: 7da05b862497dafa3d34e7b574a9954f4daec71fe8423eb32f3765982d705b10
-  patches:
-    # https://github.com/facebook/pyrefly/pull/4884
-    - 0001-completion.patch
 
 build:
   script:
